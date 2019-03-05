@@ -52,8 +52,8 @@ if(!String.prototype.formatNum) {
 (function($) {
 
 	var defaults = {
-		// Container to append the tooltip
-		tooltip_container : 'body',
+        // Container to append the tooltip
+        tooltip_container : 'body',
 		// Width of the calendar
 		width: '100%',
 		// Initial view (can be 'month', 'week', 'day')
@@ -128,15 +128,13 @@ if(!String.prototype.formatNum) {
 		merge_holidays: false,
 		display_week_numbers: true,
 		weekbox: true,
-		//shows events which fits between time_start and time_end
-		show_events_which_fits_time: false,
-		// Headers defined for ajax call
-		headers: {},
-
 		// ------------------------------------------------------------
 		// CALLBACKS. Events triggered by calendar class. You can use
 		// those to affect you UI
 		// ------------------------------------------------------------
+		onAfterEventsRendering: function(events) {
+			// Inside this function 'this' is the calendar instance
+		},
 		onAfterEventsLoad: function(events) {
 			// Inside this function 'this' is the calendar instance
 		},
@@ -423,7 +421,7 @@ if(!String.prototype.formatNum) {
 	}
 
 	Calendar.prototype._render = function() {
-		this.context.html('');
+		this.context.empty();
 		this._loadTemplate(this.options.view);
 		this.stop_cycling = false;
 
@@ -458,16 +456,14 @@ if(!String.prototype.formatNum) {
 		data.start = new Date(this.options.position.start.getTime());
 		data.lang = this.locale;
 
-		this.context.append(this.options.templates[this.options.view](data));
+		this.context.append($(this.options.templates[this.options.view](data)));
 		this._update();
 	};
 
-	Calendar.prototype._format_hour = function(str_hour, leadingZero) {
+	Calendar.prototype._format_hour = function(str_hour) {
 		var hour_split = str_hour.split(":");
 		var hour = parseInt(hour_split[0]);
 		var minutes = parseInt(hour_split[1]);
-		var leadingZero = leadingZero == 'undefined' ? true : false;
-		var hourLength = leadingZero ? 2 : 1;
 
 		var suffix = '';
 
@@ -485,7 +481,7 @@ if(!String.prototype.formatNum) {
 			}
 		}
 
-		return hour.toString().formatNum(hourLength) + ':' + minutes.toString().formatNum(2) + suffix;
+		return hour.toString().formatNum(2) + ':' + minutes.toString().formatNum(2) + suffix;
 	};
 
 	Calendar.prototype._format_time = function(datetime) {
@@ -512,7 +508,7 @@ if(!String.prototype.formatNum) {
 		var start = new Date(this.options.position.start.getTime());
 		start.setHours(time_start[0]);
 		start.setMinutes(time_start[1]);
-		var end = new Date(this.options.position.end.getTime()-(86400000));
+		var end = new Date(this.options.position.end.getTime());
 		end.setHours(time_end[0]);
 		end.setMinutes(time_end[1]);
 
@@ -537,36 +533,19 @@ if(!String.prototype.formatNum) {
 				e.end_hour = f.getDate() + ' ' + $self.locale['ms' + f.getMonth()] + ' ' + e.end_hour;
 			}
 
-			if(!$self.options.show_events_which_fits_time) {
-				if(e.start <= start.getTime() && e.end >= end.getTime()) {
-					data.all_day.push(e);
-					return;
-				}
+			if(e.start < start.getTime() && e.end > end.getTime()) {
+				data.all_day.push(e);
+				return;
+			}
 
-				if(e.end < start.getTime()) {
-					data.before_time.push(e);
-					return;
-				}
+			if(e.end < start.getTime()) {
+				data.before_time.push(e);
+				return;
+			}
 
-				if(e.start > end.getTime()) {
-					data.after_time.push(e);
-					return;
-				}
-			} else {
-				if(e.start < start.getTime()) {
-					data.before_time.push(e);
-					return;
-				}
-
-				if(e.end > end.getTime()) {
-					data.after_time.push(e);
-					return;
-				}
-
-				if(e.start < start.getTime() && e.end < end.getTime()) {
-					data.all_day.push(e);
-					return;
-				}
+			if(e.start > end.getTime()) {
+				data.after_time.push(e);
+				return;
 			}
 
 			var event_start = start.getTime() - e.start;
@@ -590,6 +569,9 @@ if(!String.prototype.formatNum) {
 
 			data.by_hour.push(e);
 		});
+
+		//var d = new Date('2013-03-14 13:20:00');
+		//warn(d.getTime());
 	};
 
 	Calendar.prototype._hour_min = function(hour) {
@@ -619,23 +601,19 @@ if(!String.prototype.formatNum) {
 		var first_day = getExtentedOption(this, 'first_day');
 
 		$.each(this.getEventsBetween(start, end), function(k, event) {
-			var eventStart  = new Date(parseInt(event.start));
-			eventStart.setHours(0,0,0,0);
-			var eventEnd    = new Date(parseInt(event.end));
-
-			event.start_day = new Date(parseInt(eventStart.getTime())).getDay();
+			event.start_day = new Date(parseInt(event.start)).getDay();
 			if(first_day == 1) {
 				event.start_day = (event.start_day + 6) % 7;
 			}
-			if((eventEnd.getTime() - eventStart.getTime()) <= 86400000) {
+			if((event.end - event.start) <= 86400000) {
 				event.days = 1;
 			} else {
-				event.days = ((eventEnd.getTime() - eventStart.getTime()) / 86400000);
+				event.days = ((event.end - event.start) / 86400000);
 			}
 
-			if(eventStart.getTime() < start) {
+			if(event.start < start) {
 
-				event.days = event.days - ((start - eventStart.getTime()) / 86400000);
+				event.days = event.days - ((start - event.start) / 86400000);
 				event.start_day = 0;
 			}
 
@@ -958,9 +936,9 @@ if(!String.prototype.formatNum) {
 				if(source.length) {
 					loader = function() {
 						var events = [];
-						var d_from = self.options.position.start;
-						var d_to = self.options.position.end;
-						var params = {from: d_from.getTime(), to: d_to.getTime(), utc_offset_from: d_from.getTimezoneOffset(), utc_offset_to: d_to.getTimezoneOffset()};
+                                                var d_from = self.options.position.start;
+                                                var d_to = self.options.position.end;
+                                                var params = {from: d_from.getTime(), to: d_to.getTime(), utc_offset_from: d_from.getTimezoneOffset(), utc_offset_to: d_to.getTimezoneOffset()};
 
 						if(browser_timezone.length) {
 							params.browser_timezone = browser_timezone;
@@ -969,8 +947,7 @@ if(!String.prototype.formatNum) {
 							url: buildEventsUrl(source, params),
 							dataType: 'json',
 							type: 'GET',
-							async: false,
-							headers: self.options.headers,
+							async: false
 						}).done(function(json) {
 							if(!json.success) {
 								$.error(json.error);
@@ -1232,7 +1209,7 @@ if(!String.prototype.formatNum) {
 				return true;
 			}
 			var event_end = this.end || this.start;
-			if((parseInt(this.start) < end) && (parseInt(event_end) > start)) {
+			if((parseInt(this.start) < end) && (parseInt(event_end) >= start)) {
 				events.push(this);
 			}
 		});
@@ -1252,11 +1229,18 @@ if(!String.prototype.formatNum) {
 
 		slider.slideUp('fast', function() {
 			var event_list = $('.events-list', cell);
-			slider.html(self.options.templates['events-list']({
+			slider.empty();
+
+			var renderedEventList = $(self.options.templates['events-list']({
 				cal: self,
 				events: self.getEventsBetween(parseInt(event_list.data('cal-start')), parseInt(event_list.data('cal-end')))
 			}));
+
+			slider.append(renderedEventList);
 			row.after(slider);
+
+			self.options.onAfterEventsRendering.call(that, renderedEventList);
+
 			self.activecell = $('[data-cal-date]', cell).text();
 			$('#cal-slide-tick').addClass('tick' + tick_position).show();
 			slider.slideDown('fast', function() {
